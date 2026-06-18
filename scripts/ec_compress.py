@@ -1,15 +1,18 @@
 from PIL import Image
-import os, sys, oxipng
+import os, sys, argparse, oxipng
 
 EXTS = ('jpg', 'jpeg', 'png')
 
 def main():
-    if len(sys.argv) < 2:
-        print('用法: python3 ec_compress.py <输入目录> [输出目录]')
-        sys.exit(1)
+    p = argparse.ArgumentParser()
+    p.add_argument('input')
+    p.add_argument('output', nargs='?', default='')
+    p.add_argument('--jpg-quality', type=int, default=85)
+    p.add_argument('--png-level', type=int, default=4)
+    args = p.parse_args()
 
-    INPUT  = os.path.expanduser(sys.argv[1])
-    OUTPUT = os.path.expanduser(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(INPUT, 'output')
+    INPUT  = os.path.expanduser(args.input)
+    OUTPUT = os.path.expanduser(args.output) if args.output else os.path.join(INPUT, 'output')
 
     if not os.path.isdir(INPUT):
         print(f'错误：目录不存在 → {INPUT}', flush=True)
@@ -42,9 +45,9 @@ def main():
 
             if ext == 'png':
                 img.save(out_path, 'PNG')
-                oxipng.optimize(out_path, level=4)
+                oxipng.optimize(out_path, level=args.png_level)
             else:
-                img.save(out_path, 'JPEG', quality=85, optimize=True)
+                img.save(out_path, 'JPEG', quality=args.jpg_quality, optimize=True)
 
             out_kb = os.path.getsize(out_path) // 1024
             saved  = orig_kb - out_kb
@@ -54,7 +57,7 @@ def main():
         except Exception as e:
             print(f'[{i}/{total}] {fname} 失败: {e}', flush=True)
 
-    print(f'\n完成！共节省 {saved_total}KB', flush=True)
+    print(f'完成！共节省 {saved_total}KB', flush=True)
 
 if __name__ == '__main__':
     main()

@@ -1,17 +1,24 @@
 from PIL import Image
-import os, sys
+import os, sys, argparse
 
 EXTS = ('jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'tiff')
 
-def main():
-    if len(sys.argv) < 2:
-        print('用法: python3 ec_resize.py <输入目录> [输出目录] [尺寸]')
-        sys.exit(1)
+def parse_color(s):
+    parts = [int(x) for x in s.split(',')]
+    return tuple(parts) if len(parts) == 3 else (255, 255, 255)
 
-    INPUT  = os.path.expanduser(sys.argv[1])
-    OUTPUT = os.path.expanduser(sys.argv[2]) if len(sys.argv) > 2 else os.path.join(INPUT, 'output')
-    SIZE   = int(sys.argv[3]) if len(sys.argv) > 3 else 800
-    SIZE   = (SIZE, SIZE)
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('input')
+    p.add_argument('output', nargs='?', default='')
+    p.add_argument('--size', type=int, default=800)
+    p.add_argument('--bg', default='255,255,255')
+    args = p.parse_args()
+
+    INPUT  = os.path.expanduser(args.input)
+    OUTPUT = os.path.expanduser(args.output) if args.output else os.path.join(INPUT, 'output')
+    SIZE   = (args.size, args.size)
+    BG     = parse_color(args.bg)
 
     if not os.path.isdir(INPUT):
         print(f'错误：目录不存在 → {INPUT}', flush=True)
@@ -36,10 +43,8 @@ def main():
         src = os.path.join(INPUT, fname)
         try:
             img = Image.open(src)
-
-            # 补白底
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-                bg = Image.new('RGB', img.size, (255, 255, 255))
+                bg = Image.new('RGB', img.size, BG)
                 if img.mode == 'P':
                     img = img.convert('RGBA')
                 bg.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
@@ -47,9 +52,8 @@ def main():
             else:
                 img = img.convert('RGB')
 
-            # 等比缩放居中
             img.thumbnail(SIZE, Image.LANCZOS)
-            canvas = Image.new('RGB', SIZE, (255, 255, 255))
+            canvas = Image.new('RGB', SIZE, BG)
             offset = ((SIZE[0] - img.width) // 2, (SIZE[1] - img.height) // 2)
             canvas.paste(img, offset)
 
@@ -66,7 +70,7 @@ def main():
         except Exception as e:
             print(f'[{i}/{total}] {fname} 失败: {e}', flush=True)
 
-    print(f'\n完成！共处理 {total} 张', flush=True)
+    print(f'完成！共处理 {total} 张', flush=True)
 
 if __name__ == '__main__':
     main()
