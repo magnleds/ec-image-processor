@@ -7,12 +7,32 @@ def parse_color(s):
     parts = [int(x) for x in s.split(',')]
     return tuple(parts) if len(parts) == 3 else (255, 255, 255)
 
+def collect_files(input_dir, output_dir, recursive):
+    files = []
+    if recursive:
+        for root, dirs, fnames in os.walk(input_dir):
+            # 跳过输出目录
+            dirs[:] = [d for d in dirs if os.path.normpath(os.path.join(root, d)) != os.path.normpath(output_dir)]
+            for f in fnames:
+                if not f.startswith('.') and f.lower().rsplit('.', 1)[-1] in EXTS:
+                    files.append(os.path.join(root, f))
+    else:
+        for f in os.listdir(input_dir):
+            full = os.path.join(input_dir, f)
+            if (not f.startswith('.')
+                    and os.path.isfile(full)
+                    and os.path.normpath(full) != os.path.normpath(output_dir)
+                    and f.lower().rsplit('.', 1)[-1] in EXTS):
+                files.append(full)
+    return files
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('input')
     p.add_argument('output', nargs='?', default='')
     p.add_argument('--size', type=int, default=800)
     p.add_argument('--bg', default='255,255,255')
+    p.add_argument('--recursive', action='store_true')
     args = p.parse_args()
 
     INPUT  = os.path.expanduser(args.input)
@@ -25,22 +45,17 @@ def main():
         sys.exit(1)
 
     os.makedirs(OUTPUT, exist_ok=True)
+    files = collect_files(INPUT, OUTPUT, args.recursive)
+    total = len(files)
 
-    fnames = [f for f in os.listdir(INPUT)
-              if not f.startswith('.')
-              and os.path.isfile(os.path.join(INPUT, f))
-              and os.path.normpath(os.path.join(INPUT, f)) != os.path.normpath(OUTPUT)
-              and f.lower().rsplit('.', 1)[-1] in EXTS]
-
-    total = len(fnames)
     if not total:
         print('没有找到图片', flush=True)
         sys.exit(0)
 
     print(f'找到 {total} 张图片，输出到 {OUTPUT}', flush=True)
 
-    for i, fname in enumerate(fnames, 1):
-        src = os.path.join(INPUT, fname)
+    for i, src in enumerate(files, 1):
+        fname = os.path.relpath(src, INPUT)
         try:
             img = Image.open(src)
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
@@ -57,9 +72,15 @@ def main():
             offset = ((SIZE[0] - img.width) // 2, (SIZE[1] - img.height) // 2)
             canvas.paste(img, offset)
 
-            ext = fname.lower().rsplit('.', 1)[-1]
-            out_name = os.path.splitext(fname)[0] + ('.png' if ext == 'png' else '.jpg')
-            out_path = os.path.join(OUTPUT, out_name)
+            # 保持子目录结构
+            rel_dir = os.path.dirname(fname)
+            out_dir = os.path.join(OUTPUT, rel_dir) if rel_dir else OUTPUT
+            os.makedirs(out_dir, exist_ok=True)
+
+            base = os.path.basename(fname)
+            ext  = base.lower().rsplit('.', 1)[-1]
+            out_name = os.path.splitext(base)[0] + ('.png' if ext == 'png' else '.jpg')
+            out_path = os.path.join(out_dir, out_name)
 
             if ext == 'png':
                 canvas.save(out_path, 'PNG')

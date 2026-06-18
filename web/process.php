@@ -25,60 +25,59 @@ if (!is_dir($dir)) {
     sse(['error' => "目录不存在: $dir"]); exit;
 }
 
-$python = '/usr/local/bin/python3';
-$base   = dirname(__DIR__);
+$python    = '/usr/local/bin/python3';
+$base      = dirname(__DIR__);
+$recursive = !empty($_GET['recursive']) && $_GET['recursive'] === '1';
 
-function run_script($python, $base, $script_name, $input, $output, $extra_args) {
-    $script = $base . '/scripts/' . $script_name;
-    $cmd = $python . ' ' . escapeshellarg($script) . ' ' . escapeshellarg($input);
+function build_cmd($python, $base, $script, $input, $output, $opts, $recursive) {
+    $cmd = $python . ' ' . escapeshellarg($base . '/scripts/' . $script)
+         . ' ' . escapeshellarg($input);
     if ($output !== '') $cmd .= ' ' . escapeshellarg($output);
-    foreach ($extra_args as $k => $v) {
+    foreach ($opts as $k => $v) {
         $cmd .= ' ' . escapeshellarg("--$k") . ' ' . escapeshellarg($v);
     }
-    $cmd .= ' 2>&1';
-    return popen($cmd, 'r');
+    if ($recursive) $cmd .= ' --recursive';
+    return $cmd . ' 2>&1';
 }
 
-function stream_proc($proc, &$sse_fn) {
+function stream($cmd) {
+    $proc = popen($cmd, 'r');
+    if (!$proc) { sse(['error' => '无法启动脚本']); return; }
     while (!feof($proc)) {
         $line = fgets($proc, 4096);
-        if ($line !== false && trim($line) !== '') {
-            $sse_fn(['line' => rtrim($line)]);
-        }
+        if ($line !== false && trim($line) !== '') sse(['line' => rtrim($line)]);
     }
     pclose($proc);
 }
 
-$resize_args = [];
-if (isset($_GET['size']))  $resize_args['size'] = (string)(int)$_GET['size'];
-if (isset($_GET['bg']))    $resize_args['bg']   = preg_replace('/[^0-9,]/', '', $_GET['bg']);
-
-$compress_args = [];
-if (isset($_GET['jpg_quality'])) $compress_args['jpg-quality'] = (string)(int)$_GET['jpg_quality'];
-if (isset($_GET['png_level']))   $compress_args['png-level']   = (string)(int)$_GET['png_level'];
-
 $out_dir = $out !== '' ? str_replace('~', '/Users/deffipy', $out) : '';
 
+$ropts = [];
+if (isset($_GET['size'])) $ropts['size'] = (string)(int)$_GET['size'];
+if (isset($_GET['bg']))   $ropts['bg']   = preg_replace('/[^0-9,]/', '', $_GET['bg']);
+
+$copts = [];
+if (isset($_GET['jpg_quality'])) $copts['jpg-quality'] = (string)(int)$_GET['jpg_quality'];
+if (isset($_GET['png_level']))   $copts['png-level']   = (string)(int)$_GET['png_level'];
+
 if ($action === 'resize') {
-    $proc = run_script($python, $base, 'ec_resize.py', $dir, $out_dir, $resize_args);
-    stream_proc($proc, 'sse');
+    stream(build_cmd($python, $base, 'ec_resize.py', $dir, $out_dir, $ropts, $recursive));
 
 } elseif ($action === 'compress') {
-    $proc = run_script($python, $base, 'ec_compress.py', $dir, $out_dir, $compress_args);
-    stream_proc($proc, 'sse');
+    stream(build_cmd($python, $base, 'ec_compress.py', $dir, $out_dir, $copts, $recursive));
 
 } elseif ($action === 'both') {
-    // 先 resize，输出到 resize_output，再把 resize_output 压缩
-    $resize_out = ($out_dir !== '' ? $out_dir : $dir . '/output') . '/resized';
-    sse(['line' => '── 第一步：调整尺寸 ──']);
-    $proc = run_script($python, $base, 'ec_resize.py', $dir, $resize_out, $resize_args);
-    stream_proc($proc, 'sse');
+    $base_out    = $out_dir !== '' ? $out_dir : $dir . '/output';
+    $resize_out  = $base_out . '/resized';
+    $compress_out = $base_out . '/compressed';
 
-    $compress_out = ($out_dir !== '' ? $out_dir : $dir . '/output') . '/compressed';
+    sse(['line' => '── 第一步：调整尺寸 ──']);
+    stream(build_cmd($python, $base, 'ec_resize.py', $dir, $resize_out, $ropts, $recursive));
+
     sse(['line' => '']);
     sse(['line' => '── 第二步：压缩图片 ──']);
-    $proc = run_script($python, $base, 'ec_compress.py', $resize_out, $compress_out, $compress_args);
-    stream_proc($proc, 'sse');
+    // both 模式第二步不再需要 recursive（resized 是平铺结构）
+    stream(build_cmd($python, $base, 'ec_compress.py', $resize_out, $compress_out, $copts, false));
 }
 
 sse(['done' => true]);

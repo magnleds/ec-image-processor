@@ -35,6 +35,12 @@ h1 { text-align: center; color: #1a1a2e; margin-bottom: 28px; font-size: 20px; f
 .btn-browse { padding: 8px 12px; background: #f0f2f5; border: 1px solid #ddd; border-radius: 7px; cursor: pointer; font-size: 13px; white-space: nowrap; transition: all .15s; }
 .btn-browse:hover { background: #e6e9f0; }
 .img-hint { font-size: 12px; color: #18a058; height: 16px; }
+.scope-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.scope-label { font-size: 12px; color: #666; }
+.scope-btns { display: flex; gap: 0; border: 1px solid #ddd; border-radius: 7px; overflow: hidden; }
+.scope-btn { padding: 5px 14px; font-size: 12px; background: #fff; border: none; cursor: pointer; color: #666; transition: all .15s; }
+.scope-btn.active { background: #4f6ef7; color: #fff; font-weight: 600; }
+.scope-btn:first-child { border-right: 1px solid #ddd; }
 
 /* Mode selector */
 .mode-btns { display: flex; flex-direction: column; gap: 8px; }
@@ -167,7 +173,13 @@ button.run:disabled { opacity: .5; cursor: not-allowed; }
           <button class="btn-browse" onclick="openBrowse('out')">📁 选择</button>
         </div>
       </div>
-      <div class="img-hint" id="img-hint"></div>
+      <div class="scope-row">
+        <div class="scope-btns">
+          <button class="scope-btn active" id="scope-local" onclick="setScope(0)">本目录</button>
+          <button class="scope-btn" id="scope-deep" onclick="setScope(1)">含子目录</button>
+        </div>
+        <div class="img-hint" id="img-hint"></div>
+      </div>
     </div>
 
     <!-- 模式 -->
@@ -269,6 +281,8 @@ button.run:disabled { opacity: .5; cursor: not-allowed; }
 
 <script>
 const LS_IN  = 'ec_in_dir';
+const LS_SCOPE = 'ec_scope';
+let currentScope = 0; // 0=本目录 1=含子目录
 const LS_OUT = 'ec_out_dir';
 let currentMode = 'resize';
 let currentBg   = '255,255,255';
@@ -281,6 +295,8 @@ let activeES = null;
 window.onload = () => {
   const inDir  = localStorage.getItem(LS_IN)  || '';
   const outDir = localStorage.getItem(LS_OUT) || '';
+  currentScope = parseInt(localStorage.getItem(LS_SCOPE) || '0');
+  setScope(currentScope, true);
   if (inDir)  { document.getElementById('in-dir').value = inDir; checkImgCount(inDir); }
   if (outDir) document.getElementById('out-dir').value = outDir;
 };
@@ -307,14 +323,31 @@ function setBg(el) {
   document.getElementById('v-bg').textContent = currentBg;
 }
 
+// ── 扫描范围切换 ──
+function setScope(v, silent) {
+  currentScope = v;
+  if (!silent) localStorage.setItem(LS_SCOPE, v);
+  document.getElementById('scope-local').classList.toggle('active', v === 0);
+  document.getElementById('scope-deep').classList.toggle('active', v === 1);
+  const dir = document.getElementById('in-dir').value.trim();
+  if (dir) checkImgCount(dir);
+}
+
 // ── 检查目录图片数 ──
 function checkImgCount(path) {
   if (!path) { document.getElementById('img-hint').textContent = ''; return; }
   fetch('browse.php?path=' + encodeURIComponent(path))
     .then(r => r.json())
     .then(d => {
-      const n = d.img_count || 0;
-      document.getElementById('img-hint').textContent = n > 0 ? `✓ 找到 ${n} 张图片` : '该目录没有图片';
+      const n  = currentScope === 1 ? (d.img_count_deep || 0) : (d.img_count || 0);
+      const nd = d.img_count_deep || 0;
+      if (n > 0) {
+        document.getElementById('img-hint').textContent = '✓ 找到 ' + n + ' 张图片';
+      } else if (currentScope === 0 && nd > 0) {
+        document.getElementById('img-hint').innerHTML = '<span style="color:#e07b18">本目录无图片，子目录共 ' + nd + ' 张</span>';
+      } else {
+        document.getElementById('img-hint').textContent = '该目录没有图片';
+      }
     }).catch(() => {});
 }
 
@@ -396,12 +429,13 @@ function runTask() {
   con.innerHTML = '';
 
   const params = new URLSearchParams({
-    action: currentMode,
+    action:      currentMode,
     dir,
     size:        document.getElementById('p-size').value,
     bg:          currentBg,
     jpg_quality: document.getElementById('p-jpgq').value,
     png_level:   document.getElementById('p-pngl').value,
+    recursive:   currentScope === 1 ? '1' : '0',
   });
   if (out) params.set('output', out);
 

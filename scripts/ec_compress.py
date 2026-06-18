@@ -3,12 +3,31 @@ import os, sys, argparse, oxipng
 
 EXTS = ('jpg', 'jpeg', 'png')
 
+def collect_files(input_dir, output_dir, recursive):
+    files = []
+    if recursive:
+        for root, dirs, fnames in os.walk(input_dir):
+            dirs[:] = [d for d in dirs if os.path.normpath(os.path.join(root, d)) != os.path.normpath(output_dir)]
+            for f in fnames:
+                if not f.startswith('.') and f.lower().rsplit('.', 1)[-1] in EXTS:
+                    files.append(os.path.join(root, f))
+    else:
+        for f in os.listdir(input_dir):
+            full = os.path.join(input_dir, f)
+            if (not f.startswith('.')
+                    and os.path.isfile(full)
+                    and os.path.normpath(full) != os.path.normpath(output_dir)
+                    and f.lower().rsplit('.', 1)[-1] in EXTS):
+                files.append(full)
+    return files
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('input')
     p.add_argument('output', nargs='?', default='')
     p.add_argument('--jpg-quality', type=int, default=85)
     p.add_argument('--png-level', type=int, default=4)
+    p.add_argument('--recursive', action='store_true')
     args = p.parse_args()
 
     INPUT  = os.path.expanduser(args.input)
@@ -19,14 +38,9 @@ def main():
         sys.exit(1)
 
     os.makedirs(OUTPUT, exist_ok=True)
+    files = collect_files(INPUT, OUTPUT, args.recursive)
+    total = len(files)
 
-    fnames = [f for f in os.listdir(INPUT)
-              if not f.startswith('.')
-              and os.path.isfile(os.path.join(INPUT, f))
-              and os.path.normpath(os.path.join(INPUT, f)) != os.path.normpath(OUTPUT)
-              and f.lower().rsplit('.', 1)[-1] in EXTS]
-
-    total = len(fnames)
     if not total:
         print('没有找到图片（jpg/jpeg/png）', flush=True)
         sys.exit(0)
@@ -34,14 +48,20 @@ def main():
     print(f'找到 {total} 张图片，输出到 {OUTPUT}', flush=True)
     saved_total = 0
 
-    for i, fname in enumerate(fnames, 1):
-        src = os.path.join(INPUT, fname)
-        ext = fname.lower().rsplit('.', 1)[-1]
+    for i, src in enumerate(files, 1):
+        fname = os.path.relpath(src, INPUT)
         orig_kb = os.path.getsize(src) // 1024
+        ext = os.path.basename(src).lower().rsplit('.', 1)[-1]
         try:
             img = Image.open(src).convert('RGB')
-            out_name = os.path.splitext(fname)[0] + ('.png' if ext == 'png' else '.jpg')
-            out_path = os.path.join(OUTPUT, out_name)
+
+            rel_dir = os.path.dirname(fname)
+            out_dir = os.path.join(OUTPUT, rel_dir) if rel_dir else OUTPUT
+            os.makedirs(out_dir, exist_ok=True)
+
+            base = os.path.basename(fname)
+            out_name = os.path.splitext(base)[0] + ('.png' if ext == 'png' else '.jpg')
+            out_path = os.path.join(out_dir, out_name)
 
             if ext == 'png':
                 img.save(out_path, 'PNG')
