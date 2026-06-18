@@ -67,6 +67,7 @@ input[type=number] {
 input[type=number]:focus { border-color: #4f6ef7; }
 input[type=range] { accent-color: #4f6ef7; cursor: pointer; }
 .param-val { font-size: 13px; font-weight: 600; color: #333; width: 32px; text-align: right; }
+.param-hint { font-size: 11px; color: #888; margin-top: -6px; margin-bottom: 4px; margin-left: 90px; line-height: 1.4; }
 .color-swatch { display: flex; gap: 6px; flex-wrap: wrap; }
 .swatch { width: 26px; height: 26px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: all .15s; }
 .swatch:hover { transform: scale(1.1); }
@@ -208,11 +209,13 @@ button.run:disabled { opacity: .5; cursor: not-allowed; }
       <div class="sec-title">调整尺寸参数</div>
       <div class="param-row">
         <span class="param-label">输出尺寸</span>
-        <input type="range" id="p-size" min="400" max="2000" step="100" value="800" oninput="document.getElementById('v-size').textContent=this.value">
+        <input type="range" id="p-size" min="400" max="2000" step="100" value="800"
+          oninput="document.getElementById('v-size').textContent=this.value; saveParam('ec_p_size',this.value); updateSizeHint(this.value)">
         <span class="param-val" id="v-size">800</span>
         <span style="font-size:12px;color:#999">px</span>
       </div>
-      <div class="param-row">
+      <div class="param-hint" id="hint-size">800px — 阿里巴巴/亚马逊主图标准尺寸</div>
+      <div class="param-row" style="margin-top:14px">
         <span class="param-label">背景色</span>
         <div class="color-swatch">
           <div class="swatch sel" style="background:#fff;border:1px solid #ddd" data-bg="255,255,255" onclick="setBg(this)" title="白色"></div>
@@ -222,21 +225,26 @@ button.run:disabled { opacity: .5; cursor: not-allowed; }
         </div>
         <span style="font-size:11px;color:#aaa;margin-left:4px" id="v-bg">255,255,255</span>
       </div>
+      <div class="param-hint" id="hint-bg">白色 — 适合绝大多数电商平台要求</div>
     </div>
 
     <div class="card" id="params-compress">
       <div class="sec-title">压缩参数</div>
       <div class="param-row">
         <span class="param-label">JPG 质量</span>
-        <input type="range" id="p-jpgq" min="50" max="100" step="1" value="85" oninput="document.getElementById('v-jpgq').textContent=this.value">
+        <input type="range" id="p-jpgq" min="50" max="100" step="1" value="85"
+          oninput="document.getElementById('v-jpgq').textContent=this.value; saveParam('ec_p_jpgq',this.value); updateJpgHint(this.value)">
         <span class="param-val" id="v-jpgq">85</span>
       </div>
-      <div class="param-row">
+      <div class="param-hint" id="hint-jpgq">85 — 体积与画质最佳平衡（推荐）</div>
+      <div class="param-row" style="margin-top:14px">
         <span class="param-label">PNG 等级</span>
-        <input type="range" id="p-pngl" min="1" max="6" step="1" value="4" oninput="document.getElementById('v-pngl').textContent=this.value">
+        <input type="range" id="p-pngl" min="1" max="6" step="1" value="4"
+          oninput="document.getElementById('v-pngl').textContent=this.value; saveParam('ec_p_pngl',this.value); updatePngHint(this.value)">
         <span class="param-val" id="v-pngl">4</span>
         <span style="font-size:12px;color:#999">/6</span>
       </div>
+      <div class="param-hint" id="hint-pngl">4 — 默认平衡（无损压缩，等级越高体积越小但越慢）</div>
     </div>
   </div>
 
@@ -299,6 +307,15 @@ window.onload = () => {
   setScope(currentScope, true);
   if (inDir)  { document.getElementById('in-dir').value = inDir; checkImgCount(inDir); }
   if (outDir) document.getElementById('out-dir').value = outDir;
+  // 恢复参数
+  const pSize = localStorage.getItem('ec_p_size');
+  const pJpgq = localStorage.getItem('ec_p_jpgq');
+  const pPngl = localStorage.getItem('ec_p_pngl');
+  const pBg   = localStorage.getItem('ec_p_bg');
+  if (pSize) { document.getElementById('p-size').value = pSize; document.getElementById('v-size').textContent = pSize; updateSizeHint(pSize); }
+  if (pJpgq) { document.getElementById('p-jpgq').value = pJpgq; document.getElementById('v-jpgq').textContent = pJpgq; updateJpgHint(pJpgq); }
+  if (pPngl) { document.getElementById('p-pngl').value = pPngl; document.getElementById('v-pngl').textContent = pPngl; updatePngHint(pPngl); }
+  if (pBg)   { const sw = document.querySelector('.swatch[data-bg="'+pBg+'"]'); if (sw) setBg(sw); }
 };
 
 // ── 模式切换 ──
@@ -321,6 +338,37 @@ function setBg(el) {
   el.classList.add('sel');
   currentBg = el.dataset.bg;
   document.getElementById('v-bg').textContent = currentBg;
+  saveParam('ec_p_bg', currentBg);
+  const bgNames = {'255,255,255':'白色 — 适合绝大多数电商平台要求','245,245,245':'浅灰 — 柔和背景，适合浅色产品','0,0,0':'黑色 — 适合深色或金属质感产品','255,228,225':'浅粉 — 温暖背景，适合美妆/礼品类'};
+  document.getElementById('hint-bg').textContent = bgNames[currentBg] || currentBg;
+}
+
+function saveParam(key, val) { localStorage.setItem(key, val); }
+
+function updateSizeHint(v) {
+  v = parseInt(v);
+  const hints = [[800,'800px — 阿里巴巴/亚马逊主图标准尺寸'],[1000,'1000px — 高清主图，适合放大展示'],[1200,'1200px — 超清，文件较大'],[400,'400px — 缩略图/预览用途'],[600,'600px — 中等尺寸']];
+  let h = v + 'px';
+  for (const [thresh, txt] of hints) { if (v === thresh) { h = txt; break; } }
+  if (v < 600) h = v + 'px — 较小，适合缩略图';
+  else if (v > 1000) h = v + 'px — 超清，文件较大';
+  document.getElementById('hint-size').textContent = h;
+}
+
+function updateJpgHint(v) {
+  v = parseInt(v);
+  let h;
+  if (v >= 95) h = v + ' — 接近原图质量，文件较大';
+  else if (v >= 85) h = v + ' — 体积与画质最佳平衡（推荐）';
+  else if (v >= 75) h = v + ' — 体积更小，画质轻微下降';
+  else h = v + ' — 体积很小，画质明显下降，不推荐';
+  document.getElementById('hint-jpgq').textContent = h;
+}
+
+function updatePngHint(v) {
+  v = parseInt(v);
+  const m = {1:'1 — 最快速，压缩率低',2:'2 — 快速压缩',3:'3 — 较快，压缩率中等',4:'4 — 默认平衡（无损，推荐）',5:'5 — 较慢，压缩率较高',6:'6 — 最大压缩，速度最慢'};
+  document.getElementById('hint-pngl').textContent = m[v] || v;
 }
 
 // ── 扫描范围切换 ──
