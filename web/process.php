@@ -67,17 +67,8 @@ if ($action === 'resize') {
     stream(build_cmd($python, $base, 'ec_compress.py', $dir, $out_dir, $copts, $recursive));
 
 } elseif ($action === 'both') {
-    $base_out    = $out_dir !== '' ? $out_dir : $dir . '/output';
-    $resize_out  = $base_out . '/resized';
-    $compress_out = $base_out . '/compressed';
-
-    sse(['line' => '── 第一步：调整尺寸 ──']);
-    stream(build_cmd($python, $base, 'ec_resize.py', $dir, $resize_out, $ropts, $recursive));
-
-    sse(['line' => '']);
-    sse(['line' => '── 第二步：压缩图片 ──']);
-    // both 模式第二步不再需要 recursive（resized 是平铺结构）
-    stream(build_cmd($python, $base, 'ec_compress.py', $resize_out, $compress_out, $copts, false));
+    $both_opts = array_merge($ropts, $copts);
+    stream(build_cmd($python, $base, 'ec_both.py', $dir, $out_dir, $both_opts, $recursive));
 }
 
 sse(['done' => true]);
