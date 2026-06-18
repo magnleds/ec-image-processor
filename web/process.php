@@ -25,7 +25,7 @@ if (!is_dir($dir)) {
     sse(['error' => "目录不存在: $dir"]); exit;
 }
 
-$python    = '/usr/local/bin/python3';
+$python    = '/usr/local/bin/python3.13';
 $base      = dirname(__DIR__);
 $recursive = !empty($_GET['recursive']) && $_GET['recursive'] === '1';
 
